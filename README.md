@@ -1,2 +1,2 @@
 # SampleCompositor
-A Sample Wayland Compositor written in python following drew and flacjackets guides and implementations
+A Sample Wayland Compositor written in python following drew and flacjacket's guides and implementations
