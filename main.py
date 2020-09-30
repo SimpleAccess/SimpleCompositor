@@ -11,7 +11,7 @@ from compositor import Compositor
 
 def signalInt(display, signalNumber, frame):
     print("SIGINT Received")
-    display.destroy()
+    display.terminate()
 
 def main():
     with Display() as display:
