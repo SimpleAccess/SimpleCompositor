@@ -17,8 +17,8 @@ from wlroots.wlr_types import (
     Seat
 )
 
-from simpleAccess import SimpleAccessWM
-
+# from simpleAccess import SimpleAccessWM
+from keyboardAdditions import SimpleAccessWM
 # wlrLib.wlr_layer
 def signalInt(display, signalNumber, frame):
     print("SIGINT Received")

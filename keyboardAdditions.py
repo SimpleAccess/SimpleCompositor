@@ -53,11 +53,11 @@ class SimpleAccessWM:
         self.cursorManager = xCursorManager
         self.seat = seat
         
-        self.keyboards: List[keyboardHandler] = []
+        self.keyboards = []
         
         self.views = []
         self.outputs = []
-        self.color = [0.7,0.7,0.7,1.0]
+        self.color = [0.85,0.85,0.85,1.0]
 
         xdgShell.new_surface_event.add(Listener(self.serverNewXdgSurface))
 
@@ -141,11 +141,12 @@ class SimpleAccessWM:
         outputX, outputY = self.outputLayout.output_coords(output)
         outputW, outputH = output.effective_resolution()
         box = Box(
-            int(outputX * output.scale),
-            int(outputY*output.scale),
-            int(surface.current.width * output.scale),
-            int(surface.current.height * output.scale)
+            int(0),
+            int(0),
+            int(outputW),
+            int(outputH)
         )
+        print(output.scale)
         transform = surface.current.transform
         inverse = Output.transform_invert(transform)
         matrix = Matrix.project_box(box, inverse, 0, output.transform_matrix)
@@ -214,22 +215,22 @@ class SimpleAccessWM:
     
     
     
-    def sendModifiers(self, ?, inputDevice):
+    def sendModifiers(self, modifiers, inputDevice):
         self.seat.set_keyboard(inputDevice)
         self.seat.keyboard_notify_modifiers(modifiers)
     
     def sendKey(self, keyEvent, inputDevice):
         keyboard = inputDevice.keyboard
-        keyboardModifiers = keyboard.modifier
+        keyboardModifier = keyboard.modifier
         
         handled = False
         
-        if keyboardModifier == keyboardModifier.ALT and key_event.state == KeyState.KEY_PRESSED:
-            keyCode = key_event.keyCode + 8
+        if keyboardModifier == keyboardModifier.CTRL and keyEvent.state == KeyState.KEY_PRESSED:
+            keyCode = keyEvent.keycode + 8
             keySyms = get_keysyms(keyboard._ptr.xkb_state, keyCode)
-            
+            print(keySyms)
             for keySym in keySyms:
-                if self.handle_keybinding(keySym):
+                if self.handleKeybinding(keySym):
                     handled = True
                     break
                 
@@ -238,13 +239,15 @@ class SimpleAccessWM:
             self.seat.keyboard_notify_key(keyEvent)
     
     def handleKeybinding(self, keySym):
-        if keySym == xkb.keysym_from_name("Escape")
-            self._display.terminate()
+        if keySym == xkb.keysym_from_name("Escape"):
+            print('alt-f4 received')
+            self.display.terminate()
         elif keySym == xkb.keysym_from_name("F1"):
-            if len(self.view) >= 2:
-                *rest, new_view, prev_view = self.views
-                self.focus_view(new_view)
-                self.views = [prev_view] + rest + [new_view]
+            print("F3 Pressed")
+            # if len(self.views) >= 2:
+            #     *rest, new_view, prev_view = self.views
+            #     self.focus_view(new_view)
+            #     self.views = [prev_view] + rest + [new_view]
                 
         else:
             return False
