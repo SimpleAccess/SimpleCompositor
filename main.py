@@ -8,17 +8,20 @@ from pywayland.server import Display
 from wlroots.backend import Backend
 from wlroots.renderer import Renderer
 
+from wlroots.wlr_types.layer_shell import LayerShell
+
 from wlroots.wlr_types import (
     Compositor,
     XdgShell,
     OutputLayout,
     Cursor,
     XCursorManager,
-    Seat
+    Seat,
+    DataDeviceManager
 )
 
-from simpleAccess import SimpleAccessWM
-
+# from simpleAccess import SimpleAccessWM
+from simpleCompositor import SimpleAccessWM
 # wlrLib.wlr_layer
 def signalInt(display, signalNumber, frame):
     print("SIGINT Received")
@@ -31,14 +34,15 @@ def main():
             renderer = Renderer(backend, display)
             compositor = Compositor(display, renderer)
             xdgShell = XdgShell(display)
+            layerShell = LayerShell(display)
+            deviceManager = DataDeviceManager(display)
             with OutputLayout() as outputLayout, Cursor(outputLayout) as cursor,XCursorManager(24) as xCursorManager, Seat(display, "seat0") as seat:
                 wm = SimpleAccessWM(
-                    display, backend, renderer, xdgShell, outputLayout, cursor, xCursorManager, seat
+                        display, backend, renderer, xdgShell, outputLayout, cursor, xCursorManager, seat, layerShell
                     )
-                # 
+
                 backend.start()
                 display.run()
                 display.destroy()
-            # with OutputLayout() as outputLayout:
 
 main()
