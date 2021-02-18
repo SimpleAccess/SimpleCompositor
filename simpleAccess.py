@@ -179,7 +179,7 @@ class SimpleAccessWM:
     def processCursorMotion(self, time):
         view, surface, sx, sy = self.viewAt(self.cursor.x, self.cursor.y)
         if view is None or surface is None:
-            self.cursorManager.set_cursor_image("right_ptr", self.cursor)
+            self.cursorManager.set_cursor_image("left_ptr", self.cursor)
             self.seat.pointer_clear_focus()
         else:
             focusChanged = self.seat.pointer_state.focused_surface != surface

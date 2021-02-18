@@ -24,7 +24,7 @@ from wlroots.wlr_types import (
 from simpleCompositor import SimpleAccessWM
 # wlrLib.wlr_layer
 def signalInt(display, signalNumber, frame):
-    print("SIGINT Received")
+    print("[SIG] SIGINT Received")
     display.terminate()
 
 def main():
@@ -36,7 +36,7 @@ def main():
             xdgShell = XdgShell(display)
             layerShell = LayerShell(display)
             deviceManager = DataDeviceManager(display)
-            with OutputLayout() as outputLayout, Cursor(outputLayout) as cursor,XCursorManager(24) as xCursorManager, Seat(display, "seat0") as seat:
+            with OutputLayout() as outputLayout, Cursor(outputLayout) as cursor,XCursorManager(50) as xCursorManager, Seat(display, "seat0") as seat:
                 wm = SimpleAccessWM(
                         display, backend, renderer, xdgShell, outputLayout, cursor, xCursorManager, seat, layerShell
                     )

@@ -21,6 +21,7 @@ from wlroots.wlr_types import (
 from xkbcommon import xkb
 
 from keyboardHandler import KeyboardHandler
+from layerView import LayerView
 from view import View
 from cursorMode import CursorMode
 
@@ -33,7 +34,7 @@ def get_keysyms(xkb_state, keyCode):
         assert syms_out[0] != ffi.NULL
         
     syms = [syms_out[0][i] for i in range(nsyms)]
-    print(f"got {nsyms} syms: {syms}")
+    print(f"[IN] got {nsyms} syms: {syms}")
     return syms
 
 
@@ -43,7 +44,7 @@ class SimpleAccessWM:
     def __init__(self, display, backend, renderer, xdgShell, outputLayout, cursor, xCursorManager, seat, layerShell):
         self.display = display
         self.socket = self.display.add_socket()
-        print(f"Compositor is running on wayland display {str(self.socket)}")
+        print(f"[OUT] Compositor is running on wayland display {str(self.socket)}")
         os.environ['WAYLAND_DISPLAY'] = str(self.socket)
         self.display.init_shm()
         self.eventLoop = display.get_event_loop()
@@ -64,10 +65,13 @@ class SimpleAccessWM:
         self.keyboards = []
         
         self.views = []
+        self.layerViews = []
         self.outputs = []
-        self.color = [0.25,0.25,0.25,1.0]
+        self.color = [0.75,0.75,0.75,1.0]
 
         xdgShell.new_surface_event.add(Listener(self.serverNewXdgSurface))
+
+        layerShell.new_surface_event.add(Listener(self.serverNewLayerShell))
 
         backend.new_output_event.add(Listener(self.serverNewOutput))
 
@@ -88,25 +92,40 @@ class SimpleAccessWM:
             if surface is not None:
                 return view, surface, x, y
         return None, None, 0, 0
+
+    def layerViewAt(self, layoutX, layoutY):
+        for layerView in self.layerViews[::-1]:
+            surface, x, y = layerView.layerViewAt(layoutX, layoutY)
+            if surface is not None:
+                return view, surface, x, y
+        return None, None, 0, 0
+
     def serverNewXdgSurface(self, listener, xdgSurface):
-        print("new surface")
+        output = self.outputs[0]
+        width, height = output.effective_resolution()
+        print(f"[INFO] EFFECTIVE RESOLUTION:{width}x{height}")
+        print("[XDG] new surface")
         if xdgSurface.role != XdgSurfaceRole.TOPLEVEL:
-            print("But not a top level surface")
+            print("[XDG] But not a top level surface")
             return
         view = View(xdgSurface, self)
         self.views.append(view)
 
+    def serverNewLayerShell(self, listener, layerShell):
+        print("[LAYER] new layer surface")
+        layerView = LayerView(layerShell, self)
+        self.layerViews.append(layerView)
 
     def serverNewOutput(self, listener, output):
         if output.modes != []:
             mode = output.preferred_mode()
             if mode is None:
-                print("Didn't Get Any Output Modes")
+                print("[OUT] Didn't Get Any Output Modes")
                 return
             output.set_mode(mode)
             output.enable()
             if not output.commit():
-                print("Failed to Commit Output")
+                print("[OUT] Failed to Commit Output")
                 return
 
         self.outputs.append(output)
@@ -125,7 +144,7 @@ class SimpleAccessWM:
         now = Timespec.get_monotonic_time()
         output = self.outputs[0]
         if not output.attach_render():
-            print("could not attach renderer")
+            print("[COMP] could not attach renderer")
             return
         width, height = output.effective_resolution()
 
@@ -134,13 +153,23 @@ class SimpleAccessWM:
         self.renderer.clear(self.color)
         
         for view in self.views:
+            #print(f"******{view}")
             if not view.mapped:
                 continue
             data = output,view, now
             view.xdgSurface.for_each_surface(self.renderSurface, data)
+        
+        for layerView in self.layerViews:
+            if not layerView.mapped:
+                continue
+            date = output, layerView, now
+            # lib.wlr_layer_surface_v1_for_each_surface(layerView.layerShell._ptr,self.renderSurface,data)
+            layerView.layerShell.for_each_surface(self.renderSurface, data)
+
         output.render_software_cursors()
         self.renderer.end()
         output.commit()
+
     def renderSurface(self, surface, surfaceX, surfaceY, data):
         output, view, now = data
 
@@ -202,7 +231,7 @@ class SimpleAccessWM:
         self.processCursorMotion(absEventMotion.time_msec)
 
     def serverCursorButton(self, listener, event):
-        print(f"Got button click event {event.button_state}")
+        print(f"[IN] Got button click event {event.button_state}")
         self.seat.pointer_notify_button(event.time_msec, event.button, event.button_state)
 
         view, surface, _, _ = self.viewAt(self.cursor.x, self.cursor.y)
@@ -215,7 +244,7 @@ class SimpleAccessWM:
     def processCursorMotion(self, time):
         view, surface, sx, sy = self.viewAt(self.cursor.x, self.cursor.y)
         if view is None or surface is None:
-            self.cursorManager.set_cursor_image("right_ptr", self.cursor)
+            self.cursorManager.set_cursor_image("left_ptr", self.cursor)
             self.seat.pointer_clear_focus()
         else:
             focusChanged = self.seat.pointer_state.focused_surface != surface
@@ -234,7 +263,7 @@ class SimpleAccessWM:
         self.cursor.set_surface(event.surface, event.hotspot)
     
     def seatRequestSetSelection(self, listener, event) -> None:
-        print("request set selection")
+        print("[IN] request set selection")
         self.seat.set_selection(event._ptr.source, event.serial)
     
     def sendModifiers(self, modifiers, inputDevice):
@@ -250,7 +279,6 @@ class SimpleAccessWM:
         if keyboardModifier == keyboardModifier.CTRL and keyEvent.state == KeyState.KEY_PRESSED:
             keyCode = keyEvent.keycode + 8
             keySyms = get_keysyms(keyboard._ptr.xkb_state, keyCode)
-            print(keySyms)
             for keySym in keySyms:
                 if self.handleKeybinding(keySym):
                     handled = True
@@ -262,18 +290,26 @@ class SimpleAccessWM:
     
     def handleKeybinding(self, keySym):
         if keySym == xkb.keysym_from_name("Escape"):
-            print('alt-f4 received')
+            print('[IN] ctrl-esc received')
             self.display.terminate()
-        elif keySym == xkb.keysym_from_name("f2"):
-            os.system('python open-terminal.py')
         elif keySym == xkb.keysym_from_name("F1"):
-            print("F3 Pressed")
+            print('[IN] ctrl-F1 received')
             if len(self.views) >= 2:
                 *rest, new_view, prev_view = self.views
                 self.focusView(new_view,None)
                 self.views = [prev_view] + rest + [new_view]
-                
+        elif keySym == xkb.keysym_from_name("F2"):
+            print('[IN] ctrl-F2 received')
+            os.system('WAYLAND_DISPLAY=wayland-0 weston-terminal --font-size=36 &')
+        elif keySym == xkb.keysym_from_name("F3"):
+            print('[IN] ctrl-F3 received')
+            os.system('WAYLAND_DISPLAY=wayland-0 nautilus &')
+        elif keySym == xkb.keysym_from_name("F4"):
+            print('[IN] ctrl-F4 received')
+            os.system('~/Git/wlroots/build/examples/layer-shell -l background -w 1920 -h 1080')
+            # os.system('WAYLAND_DISPLAY=wayland-0 vscodium &')
         else:
+            print(f'[IN] ctrl-{xkb.keysym_get_name(keySym)} recieved')
             return False
         return True
     
@@ -293,8 +329,31 @@ class SimpleAccessWM:
         views.remove(view)
         views.append(view)
         self.views = views
-
+        width, height = self.outputs[0].effective_resolution()
+        view.xdgSurface.set_size(width, height)
         view.xdgSurface.set_activated(True)
 
         keyboard = self.seat.keyboard
         self.seat.keyboard_notify_enter(view.xdgSurface.surface,keyboard)
+
+    def focusLayerView(self, layerView, surface=None):
+        if surface is None:
+            surface = layerView.layerShell.surface
+            
+        # previousSurface = self.seat.keyboard_state.focused_surface
+        # if previousSurface == surface:
+        #     return
+          
+        # if previousSurface is not None:
+        #     previousLayerShell = self.layerShell.from_surface(previousSurface)
+        #     previousLayerShell.set_activated(False)
+            
+        layerViews = self.layerViews[:]
+        layerViews.remove(layerView)
+        layerViews.append(layerView)
+        self.layerViews = layerViews
+        
+        # layerView.layerShell.set_activated(True)
+        
+        keyboard = self.seat.keyboard
+        self.seat.keyboard_notify_enter(layerView.layerShell.surface,keyboard)

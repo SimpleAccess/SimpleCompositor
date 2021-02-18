@@ -5,8 +5,8 @@ class View:
         self.xdgSurface = xdgSurface
         self.server = server
         self.mapped = False
-        self.x = 0.0
-        self.y = 0.0
+        self.x = -25.0
+        self.y = -25.0
 
         xdgSurface.map_event.add(Listener(self.xdgSurfaceMap))
         xdgSurface.unmap_event.add(Listener(self.xdgSurfaceUnmap))
