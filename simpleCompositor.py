@@ -6,6 +6,8 @@ from wlroots import ffi, lib
 from wlroots.wlr_types.xdg_shell import XdgSurface, XdgSurfaceRole
 from wlroots.wlr_types.input_device import ButtonState, InputDeviceType
 
+
+
 from wlroots.wlr_types.keyboard import KeyState, KeyboardModifier
 
 from wlroots.wlr_types import (
@@ -87,6 +89,10 @@ class SimpleAccessWM:
         backend.new_input_event.add(Listener(self.serverNewInput))
 
     def viewAt(self, layoutX, layoutY):
+        for layerView in self.layerViews[::-1]:
+            surface, x, y = layerView.layerViewAt(layoutX, layoutY)
+            if surface is not None:
+                return layerView, surface, x, y
         for view in self.views[::-1]:
             surface, x, y = view.viewAt(layoutX, layoutY)
             if surface is not None:
@@ -97,7 +103,7 @@ class SimpleAccessWM:
         for layerView in self.layerViews[::-1]:
             surface, x, y = layerView.layerViewAt(layoutX, layoutY)
             if surface is not None:
-                return view, surface, x, y
+                return layerView, surface, x, y
         return None, None, 0, 0
 
     def serverNewXdgSurface(self, listener, xdgSurface):
@@ -108,6 +114,8 @@ class SimpleAccessWM:
         if xdgSurface.role != XdgSurfaceRole.TOPLEVEL:
             print("[XDG] But not a top level surface")
             return
+        x = ffi.getctype(xdgSurface.toplevel._ptr)
+        print(x)
         view = View(xdgSurface, self)
         self.views.append(view)
 
@@ -238,9 +246,10 @@ class SimpleAccessWM:
         if event.button_state == ButtonState.RELEASED:
             # exit interactive move/resize
             self.cursor_mode = CursorMode.PASSTHROUGH
-        elif view is not None:
+        elif view is not None and lib.wlr_surface_is_xdg_surface(surface._ptr):
             self.focusView(view, surface)
-
+        elif view is not None:
+            self.focusLayerView(view, surface)
     def processCursorMotion(self, time):
         view, surface, sx, sy = self.viewAt(self.cursor.x, self.cursor.y)
         if view is None or surface is None:
@@ -276,7 +285,7 @@ class SimpleAccessWM:
         
         handled = False
         
-        if keyboardModifier == keyboardModifier.CTRL and keyEvent.state == KeyState.KEY_PRESSED:
+        if (keyboardModifier == keyboardModifier.LOGO or keyboardModifier == keyboardModifier.CTRL) and keyEvent.state == KeyState.KEY_PRESSED:
             keyCode = keyEvent.keycode + 8
             keySyms = get_keysyms(keyboard._ptr.xkb_state, keyCode)
             for keySym in keySyms:
@@ -320,8 +329,10 @@ class SimpleAccessWM:
         previousSurface = self.seat.keyboard_state.focused_surface
         if previousSurface == surface:
             return
-        
-        if previousSurface is not None:
+
+        keyboard = self.seat.keyboard
+
+        if previousSurface is not None and lib.wlr_surface_is_xdg_surface(previousSurface._ptr):
             previousXdgSurface = XdgSurface.from_surface(previousSurface)
             previousXdgSurface.set_activated(False)
 
@@ -333,27 +344,15 @@ class SimpleAccessWM:
         view.xdgSurface.set_size(width, height)
         view.xdgSurface.set_activated(True)
 
-        keyboard = self.seat.keyboard
         self.seat.keyboard_notify_enter(view.xdgSurface.surface,keyboard)
 
     def focusLayerView(self, layerView, surface=None):
         if surface is None:
             surface = layerView.layerShell.surface
-            
-        # previousSurface = self.seat.keyboard_state.focused_surface
-        # if previousSurface == surface:
-        #     return
-          
-        # if previousSurface is not None:
-        #     previousLayerShell = self.layerShell.from_surface(previousSurface)
-        #     previousLayerShell.set_activated(False)
-            
-        layerViews = self.layerViews[:]
-        layerViews.remove(layerView)
-        layerViews.append(layerView)
-        self.layerViews = layerViews
-        
-        # layerView.layerShell.set_activated(True)
         
         keyboard = self.seat.keyboard
         self.seat.keyboard_notify_enter(layerView.layerShell.surface,keyboard)
+
+    def getPrimaryDisplayResolution(self):
+        w, h = self.outputs[0].effective_resolution()
+        return {'width':w, 'height': h}
